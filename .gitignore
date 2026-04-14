@@ -1,0 +1,45 @@
+# Environment variables (contains API key)
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# Testing
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Generated content
+songs/
+images/
+*.mp3
+*.wav
+*.pcm
+*.hex
+*.jpeg
+*.jpg
+*.png
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
