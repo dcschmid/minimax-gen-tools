@@ -8,6 +8,7 @@ Features:
 - Multiple aspect ratios
 - Base64 or URL output
 - Auto-loads .env file for API key
+- Presets for Knowledge Image (anime 1980s) and Podcast (documentary style)
 """
 
 import os
@@ -15,6 +16,7 @@ import requests
 import argparse
 import base64
 import time
+import random
 
 try:
     from dotenv import load_dotenv
@@ -24,6 +26,37 @@ except ImportError:
     pass
 
 from utils import resolve_api_key, sanitize_filename
+
+
+KNOWLEDGE_IMAGE_SCENES = [
+    "A Japanese anime street scene with young people gathered around a record store listening to cassettes, vinyl scattered on the sidewalk, a transistor radio playing, classic 80s anime character designs with bold outlines and cel-shaded shadows",
+    "An anime concert venue filled with silhouetted fans watching a small stage where musicians perform, neon signs in Japanese katakana glowing softly in the background, 80s Tokyo atmosphere with steam rising from street grates",
+    "A cozy Japanese apartment interior with a young person at a desk writing lyrics by hand, cassette tapes stacked beside an open window showing a rainy cityscape, warm interior lighting, anime style with strong black outlines",
+    "An anime street vendor selling bootleg cassettes from a bicycle cart in a bustling Shinjuku alley, late night setting with neon reflections on wet pavement, two young fans inspecting tapes under a flickering streetlight",
+    "A vintage Japanese record shop interior with floor-to-ceiling shelves of vinyl and cassettes, a listening booth in the corner where two anime characters share headphones, detailed cel-shaded illustration style",
+    "An anime scene of friends riding bikes through a cherry blossom path, one wearing headphones connected to a Walkman on the handlebars, soft pink petals falling, warm spring afternoon light, 80s fashion",
+    "A Japanese radio station broadcast room in anime style, a young woman with headphones adjusting vintage equipment, reel-to-reel tapes on the desk, soft glow from VU meters, 80s aesthetic",
+    "An anime music video shoot set with neon tubes and a small stage, a singer performing with a synthesizer, film crew as silhouettes in the background, cinematic 80s production feel",
+    "A Japanese high school gym converted into a live music venue, band performing on stage with heavy equipment, students dancing, banners hanging from the ceiling, energetic anime atmosphere",
+    "A quiet moment in an anime character's bedroom filled with music posters on walls, a turntable spinning, music sheets scattered on the floor, afternoon sunlight through curtains, personal and intimate",
+]
+
+KNOWLEDGE_IMAGE_STYLE = """Japanese Anime Style from the 1980s with bold outlines, slightly exaggerated facial features, and cel-shaded shadows typical of hand-drawn animation. Vibrant but slightly desaturated colors. NO TEXT ON THE IMAGE. Single scene only, not a series. Creative but consistent anime aesthetic, varied scenes matching the musical theme. Refined graphic-novel realism, clearly visible line work, subtle cross-hatching, illustrated texture on skin and fabric. No photographic elements, no camera effects, no depth falloff."""
+
+PODCAST_HOST_DANIEL = "Daniel, European type, mid-40s, shoulder-length dark hair neatly groomed, well-groomed beard, glasses, calm intelligent expression, grounded confident presence, seated at broadcast table"
+
+PODCAST_HOST_ANNABELLE = "Annabelle, European/Latin type, early-40s, shoulder-length brown hair, subtle theme-appropriate makeup, warm attentive expression, open emotionally intelligent presence, seated at broadcast table"
+
+PODCAST_STYLE = """hand-drawn illustrated documentary style, high-quality printed editorial illustration, clearly visible line work around faces, hair, clothing and objects, subtle cross-hatching and restrained paper-like grain, illustrated skin texture (no photographic skin blending), illustrated fabric texture with simplified folds and weight, lighting interpreted through drawing not camera optics, graphic-novel line emphasis, balanced contrast between figure and background. NO TEXT ON IMAGE. Single authentic moment captured mid-conversation, not staged, not symbolic."""
+
+
+def build_knowledge_prompt(topic: str) -> str:
+    scene = random.choice(KNOWLEDGE_IMAGE_SCENES)
+    return f"""{scene}. Topic: {topic}. Style: {KNOWLEDGE_IMAGE_STYLE}"""
+
+
+def build_podcast_prompt(theme: str) -> str:
+    return f"""A refined graphic-novel documentary style scene in a podcast/broadcast studio appropriate for {theme}. Two podcast hosts are seated side by side at a shared wooden broadcast table equipped with studio microphones, headphones and authentic studio elements. {PODCAST_HOST_DANIEL} and {PODCAST_HOST_ANNABELLE} are mid-conversation, clearly visible from frontal view, seated together, natural conversational smiles (subtle, asymmetrical), relaxed engaged expressions, mouths slightly open or mid-speech. Both fully contained within a 16:9 horizontal composition. Clothing derived from {theme}. Subtle studio status sign if plausible. No text on image. Style: {PODCAST_STYLE}"""
 
 
 def generate_image(
@@ -121,7 +154,20 @@ Examples:
     )
 
     parser.add_argument(
-        "prompt", help="Description of the desired image (1-2000 chars)"
+        "prompt",
+        nargs="?",
+        help="Description of the desired image (1-2000 chars). Required unless --preset is used.",
+    )
+
+    preset_group = parser.add_argument_group("Presets (build prompt automatically)")
+    preset_group.add_argument(
+        "--preset",
+        choices=["knowledge", "podcast"],
+        help="Use a preset: 'knowledge' for anime 1980s music images, 'podcast' for documentary-style podcast hosts",
+    )
+    preset_group.add_argument(
+        "--theme",
+        help="Topic/theme for preset (e.g., 'From Soul to Modern Dance Music - 50 Tracks That Map the Journey')",
     )
 
     parser.add_argument(
@@ -163,6 +209,24 @@ Examples:
         print("       or use --api-key argument.")
         return 1
 
+    if args.preset:
+        if not args.theme:
+            print("Error: --theme is required when using --preset")
+            return 1
+        if args.preset == "knowledge":
+            prompt = build_knowledge_prompt(args.theme)
+            if args.aspect_ratio == "1:1":
+                args.aspect_ratio = "3:2"
+        elif args.preset == "podcast":
+            prompt = build_podcast_prompt(args.theme)
+            args.aspect_ratio = "16:9"
+        print(f"Using preset '{args.preset}' with theme: {args.theme}")
+    else:
+        if not args.prompt:
+            print("Error: prompt is required when not using --preset")
+            return 1
+        prompt = args.prompt
+
     subject_reference = None
     if args.reference_url or args.reference_file:
         ref_image = None
@@ -182,7 +246,7 @@ Examples:
     try:
         result = generate_image(
             api_key=api_key,
-            prompt=args.prompt,
+            prompt=prompt,
             model=args.model,
             aspect_ratio=args.aspect_ratio,
             response_format=args.response_format,
@@ -194,7 +258,7 @@ Examples:
         if args.output_name:
             base_name = sanitize_filename(args.output_name)
         else:
-            base_name = sanitize_filename(args.prompt)[:50]
+            base_name = sanitize_filename(prompt)[:50]
 
         timestamp = int(time.time())
         output_path = os.path.join(args.output_dir, f"{base_name}_{timestamp}")
@@ -217,11 +281,14 @@ Examples:
         print(f"Saving metadata to {meta_path}...")
 
         with open(meta_path, "w", encoding="utf-8") as f:
-            f.write(f"Prompt: {args.prompt}\n")
+            f.write(f"Prompt: {prompt}\n")
             f.write(f"Model: {args.model}\n")
             f.write(f"Aspect Ratio: {args.aspect_ratio}\n")
             f.write(f"Response Format: {args.response_format}\n")
             f.write(f"Images Generated: {len(images)}\n")
+            if args.preset:
+                f.write(f"Preset: {args.preset}\n")
+                f.write(f"Theme: {args.theme}\n")
             if args.reference_url:
                 f.write(f"Reference URL: {args.reference_url}\n")
             if args.reference_file:
