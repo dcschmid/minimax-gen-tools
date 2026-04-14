@@ -7,6 +7,7 @@ Features:
 - Image-to-Image generation with reference images
 - Multiple aspect ratios
 - Base64 or URL output
+- n (number of images), seed, width/height, prompt_optimizer
 - Auto-loads .env file for API key
 """
 
@@ -33,6 +34,11 @@ def generate_image(
     aspect_ratio: str = "1:1",
     response_format: str = "base64",
     subject_reference: list = None,
+    n: int = None,
+    width: int = None,
+    height: int = None,
+    seed: int = None,
+    prompt_optimizer: bool = None,
 ) -> dict:
     """
     Generates an image using the MiniMax API.
@@ -44,6 +50,11 @@ def generate_image(
         aspect_ratio: Image aspect ratio (default: 1:1)
         response_format: Output format - "base64" or "url"
         subject_reference: Optional list of reference images for character consistency
+        n: Number of images to generate (1-9)
+        width: Image width in px (512-2048, divisible by 8)
+        height: Image height in px (512-2048, divisible by 8)
+        seed: Random seed for result reproduction
+        prompt_optimizer: Enable automatic prompt optimization
 
     Returns dict with: images (list of base64 or URLs), model, prompt
     """
@@ -62,15 +73,30 @@ def generate_image(
 
     if subject_reference:
         payload["subject_reference"] = subject_reference
+    if n is not None:
+        payload["n"] = n
+    if width is not None:
+        payload["width"] = width
+    if height is not None:
+        payload["height"] = height
+    if seed is not None:
+        payload["seed"] = seed
+    if prompt_optimizer is not None:
+        payload["prompt_optimizer"] = prompt_optimizer
 
     print(f"Generating image (model: {model}, ratio: {aspect_ratio})...")
     response = requests.post(url, headers=headers, json=payload, timeout=120)
     response.raise_for_status()
     data = response.json()
 
+    base_resp = data.get("base_resp", {})
+    if base_resp.get("status_code") != 0:
+        raise Exception(
+            f"API error: {base_resp.get('status_code')} - {base_resp.get('status_msg')}"
+        )
+
     if not data.get("data"):
-        print(f"API error: No 'data' field in response. Response: {data}")
-        return {"images": [], "model": model, "prompt": prompt}
+        raise Exception(f"API error: No 'data' field in response. Response: {data}")
 
     images = data.get("data", {}).get("image_base64") or data.get("data", {}).get(
         "image_urls", []
@@ -100,14 +126,17 @@ Examples:
   # Basic text-to-image generation
   python image_generator.py "A sunset over the ocean"
 
-  # Square image
-  python image_generator.py "A cat sitting on a windowsill" --aspect-ratio 1:1
+  # Generate 4 images
+  python image_generator.py "A cat" --n 4
 
-  # Wide 16:9 image
-  python image_generator.py "Landscape with mountains" --aspect-ratio 16:9
+  # Custom dimensions (width/height take priority over aspect-ratio)
+  python image_generator.py "A portrait" --width 1024 --height 1792
 
-  # Portrait image
-  python image_generator.py "Portrait of a woman" --aspect-ratio 3:4
+  # With seed for reproducibility
+  python image_generator.py "Mountain landscape" --seed 42
+
+  # Enable prompt optimizer
+  python image_generator.py "Abstract art" --prompt-optimizer
 
   # Image-to-image with reference
   python image_generator.py "The same character in a forest" \\
@@ -116,17 +145,11 @@ Examples:
   # Local reference image
   python image_generator.py "The same person at the beach" \\
     --reference-file "person.jpg"
-
-  # Custom output directory
-  python image_generator.py "Abstract art" --output-dir my_images
-
-  # Save as URL format
-  python image_generator.py "City skyline" --response-format url
         """,
     )
 
     parser.add_argument(
-        "prompt", help="Description of the desired image (1-2000 chars)"
+        "prompt", help="Description of the desired image (1-1500 chars)"
     )
 
     parser.add_argument(
@@ -134,7 +157,10 @@ Examples:
     )
 
     parser.add_argument(
-        "--model", default="image-01", help="Model to use (default: image-01)"
+        "--model",
+        default="image-01",
+        choices=["image-01", "image-01-live"],
+        help="Model to use (default: image-01)",
     )
 
     parser.add_argument(
@@ -149,6 +175,33 @@ Examples:
         default="base64",
         choices=["base64", "url"],
         help="Output format - base64 (saves files) or url (downloads)",
+    )
+
+    parser.add_argument(
+        "--n",
+        type=int,
+        choices=[1, 2, 3, 4, 5, 6, 7, 8, 9],
+        help="Number of images to generate (1-9)",
+    )
+
+    parser.add_argument(
+        "--width",
+        type=int,
+        help="Image width in px (512-2048, divisible by 8). Takes priority over aspect-ratio.",
+    )
+
+    parser.add_argument(
+        "--height",
+        type=int,
+        help="Image height in px (512-2048, divisible by 8). Takes priority over aspect-ratio.",
+    )
+
+    parser.add_argument("--seed", type=int, help="Random seed for reproducible results")
+
+    parser.add_argument(
+        "--prompt-optimizer",
+        action="store_true",
+        help="Enable automatic prompt optimization",
     )
 
     ref_group = parser.add_argument_group("Reference image (for character consistency)")
@@ -192,6 +245,11 @@ Examples:
             aspect_ratio=args.aspect_ratio,
             response_format=args.response_format,
             subject_reference=subject_reference,
+            n=args.n,
+            width=args.width,
+            height=args.height,
+            seed=args.seed,
+            prompt_optimizer=args.prompt_optimizer,
         )
 
         os.makedirs(args.output_dir, exist_ok=True)
@@ -227,6 +285,16 @@ Examples:
             f.write(f"Aspect Ratio: {args.aspect_ratio}\n")
             f.write(f"Response Format: {args.response_format}\n")
             f.write(f"Images Generated: {len(images)}\n")
+            if args.n:
+                f.write(f"N: {args.n}\n")
+            if args.width:
+                f.write(f"Width: {args.width}\n")
+            if args.height:
+                f.write(f"Height: {args.height}\n")
+            if args.seed is not None:
+                f.write(f"Seed: {args.seed}\n")
+            if args.prompt_optimizer:
+                f.write(f"Prompt Optimizer: enabled\n")
             if args.reference_url:
                 f.write(f"Reference URL: {args.reference_url}\n")
             if args.reference_file:
