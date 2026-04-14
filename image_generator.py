@@ -16,6 +16,7 @@ import requests
 import argparse
 import base64
 import time
+import random
 
 try:
     from dotenv import load_dotenv
@@ -29,6 +30,93 @@ from utils import resolve_api_key, sanitize_filename
 
 KNOWLEDGE_IMAGE_STYLE = """Japanese Anime Style from the 1980s with bold outlines, slightly exaggerated facial features, and cel-shaded shadows typical of hand-drawn animation. Vibrant but slightly desaturated colors. NO TEXT ON THE IMAGE. Single scene only, not a series. Creative but consistent anime aesthetic, varied scenes matching the musical theme. Refined graphic-novel realism, clearly visible line work, subtle cross-hatching, illustrated texture on skin and fabric. No photographic elements, no camera effects, no depth falloff."""
 
+KNOWLEDGE_IMAGE_ELEMENTS = {
+    "decades": {
+        "1950s": [
+            "juke box",
+            "rock and roll teens",
+            "greaser jackets",
+            "soda fountain",
+            "sock hop",
+            "vinyl records",
+            "electric guitar",
+            "harmonicas",
+        ],
+        "1960s": [
+            "beatnik cafe",
+            "mod fashion",
+            "vinyl spins",
+            "coffee house",
+            "electric organs",
+            "flower power",
+            "psychedelic patterns",
+            "festival crowd",
+        ],
+        "1970s": [
+            "disco dance floor",
+            "funk bass",
+            "quadraphonic speakers",
+            "lava lamps",
+            "platform shoes",
+            "dj booth",
+            "mirror balls",
+            "bell bottoms",
+        ],
+        "1980s": [
+            "cassette tapes",
+            "synthesizer",
+            "neon lights",
+            "arcade games",
+            "walkman",
+            "boom box",
+            "new wave fashion",
+            "vinyl records",
+            "anime teens listening",
+        ],
+        "1990s": [
+            "grunge flannel",
+            "cd player",
+            " mixtape",
+            "skateboard culture",
+            "rave flyers",
+            "laptop music",
+            "alternative rock",
+            "boy band posters",
+        ],
+        "2000s": [
+            "ipod earbuds",
+            "mp3 player",
+            "flat screen",
+            "smartphone",
+            "lady gaga posters",
+            "emo scene",
+            "djing laptop",
+            "beacon lights",
+        ],
+    },
+    "moods": [
+        "energetic dancing",
+        "quiet listening",
+        "friends hanging out",
+        "late night vibes",
+        "morning commute",
+        "sunset relax",
+        "crowded venue",
+        "intimate moment",
+    ],
+    "locations": [
+        "record store",
+        "bedroom",
+        "street corner",
+        "radio station",
+        "concert venue",
+        "coffee shop",
+        "car interior",
+        "dance club",
+        "music school practice room",
+    ],
+}
+
 PODCAST_HOST_DANIEL = "Daniel, European type, mid-40s, shoulder-length dark hair neatly groomed, well-groomed beard, glasses, calm intelligent expression, grounded confident presence, seated at broadcast table"
 
 PODCAST_HOST_ANNABELLE = "Annabelle, European/Latin type, early-40s, shoulder-length brown hair, subtle theme-appropriate makeup, warm attentive expression, open emotionally intelligent presence, seated at broadcast table"
@@ -36,8 +124,29 @@ PODCAST_HOST_ANNABELLE = "Annabelle, European/Latin type, early-40s, shoulder-le
 PODCAST_STYLE = """hand-drawn illustrated documentary style, high-quality printed editorial illustration, clearly visible line work around faces, hair, clothing and objects, subtle cross-hatching and restrained paper-like grain, illustrated skin texture (no photographic skin blending), illustrated fabric texture with simplified folds and weight, lighting interpreted through drawing not camera optics, graphic-novel line emphasis, balanced contrast between figure and background. NO TEXT ON IMAGE. Single authentic moment captured mid-conversation, not staged, not symbolic."""
 
 
+def extract_decade(topic: str) -> str:
+    topic_lower = topic.lower()
+    decades = ["1950s", "1960s", "1970s", "1980s", "1990s", "2000s"]
+    for decade in decades:
+        if decade in topic_lower:
+            return decade
+    return "1980s"
+
+
 def build_knowledge_prompt(topic: str) -> str:
-    return f"""{topic}. Style: {KNOWLEDGE_IMAGE_STYLE}"""
+    decade = extract_decade(topic)
+    elements = KNOWLEDGE_IMAGE_ELEMENTS["decades"].get(
+        decade, KNOWLEDGE_IMAGE_ELEMENTS["decades"]["1980s"]
+    )
+    moods = KNOWLEDGE_IMAGE_ELEMENTS["moods"]
+    locations = KNOWLEDGE_IMAGE_ELEMENTS["locations"]
+
+    music_ref = ", ".join(random.sample(elements, min(4, len(elements))))
+    mood = random.choice(moods)
+    location = random.choice(locations)
+
+    scene = f"""A beautiful anime scene showing anime characters in a {location}, {mood}. The setting reflects the era with {music_ref}. The atmosphere captures the essence of {topic}. Characters are in authentic period fashion, naturally enjoying music together."""
+    return f"""{scene} Style: {KNOWLEDGE_IMAGE_STYLE}"""
 
 
 def build_podcast_prompt(theme: str) -> str:
