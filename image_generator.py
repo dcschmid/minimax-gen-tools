@@ -8,7 +8,6 @@ Features:
 - Multiple aspect ratios
 - Base64 or URL output
 - Auto-loads .env file for API key
-- Presets for Knowledge Image (anime 1980s) and Podcast (documentary style)
 """
 
 import os
@@ -16,7 +15,6 @@ import requests
 import argparse
 import base64
 import time
-import random
 
 try:
     from dotenv import load_dotenv
@@ -26,131 +24,6 @@ except ImportError:
     pass
 
 from utils import resolve_api_key, sanitize_filename
-
-
-KNOWLEDGE_IMAGE_STYLE = """Japanese Anime Style from the 1980s with bold outlines, slightly exaggerated facial features, and cel-shaded shadows typical of hand-drawn animation. Vibrant but slightly desaturated colors. NO TEXT ON THE IMAGE. Single scene only, not a series. Creative but consistent anime aesthetic, varied scenes matching the musical theme. Refined graphic-novel realism, clearly visible line work, subtle cross-hatching, illustrated texture on skin and fabric. No photographic elements, no camera effects, no depth falloff."""
-
-KNOWLEDGE_IMAGE_ELEMENTS = {
-    "decades": {
-        "1950s": [
-            "juke box",
-            "rock and roll teens",
-            "greaser jackets",
-            "soda fountain",
-            "sock hop",
-            "vinyl records",
-            "electric guitar",
-            "harmonicas",
-        ],
-        "1960s": [
-            "beatnik cafe",
-            "mod fashion",
-            "vinyl spins",
-            "coffee house",
-            "electric organs",
-            "flower power",
-            "psychedelic patterns",
-            "festival crowd",
-        ],
-        "1970s": [
-            "disco dance floor",
-            "funk bass",
-            "quadraphonic speakers",
-            "lava lamps",
-            "platform shoes",
-            "dj booth",
-            "mirror balls",
-            "bell bottoms",
-        ],
-        "1980s": [
-            "cassette tapes",
-            "synthesizer",
-            "neon lights",
-            "arcade games",
-            "walkman",
-            "boom box",
-            "new wave fashion",
-            "vinyl records",
-            "anime teens listening",
-        ],
-        "1990s": [
-            "grunge flannel",
-            "cd player",
-            " mixtape",
-            "skateboard culture",
-            "rave flyers",
-            "laptop music",
-            "alternative rock",
-            "boy band posters",
-        ],
-        "2000s": [
-            "ipod earbuds",
-            "mp3 player",
-            "flat screen",
-            "smartphone",
-            "lady gaga posters",
-            "emo scene",
-            "djing laptop",
-            "beacon lights",
-        ],
-    },
-    "moods": [
-        "energetic dancing",
-        "quiet listening",
-        "friends hanging out",
-        "late night vibes",
-        "morning commute",
-        "sunset relax",
-        "crowded venue",
-        "intimate moment",
-    ],
-    "locations": [
-        "record store",
-        "bedroom",
-        "street corner",
-        "radio station",
-        "concert venue",
-        "coffee shop",
-        "car interior",
-        "dance club",
-        "music school practice room",
-    ],
-}
-
-PODCAST_HOST_DANIEL = "Daniel, European type, mid-40s, shoulder-length dark hair neatly groomed, well-groomed beard, glasses, calm intelligent expression, grounded confident presence, seated at broadcast table"
-
-PODCAST_HOST_ANNABELLE = "Annabelle, European/Latin type, early-40s, shoulder-length brown hair, subtle theme-appropriate makeup, warm attentive expression, open emotionally intelligent presence, seated at broadcast table"
-
-PODCAST_STYLE = """hand-drawn illustrated documentary style, high-quality printed editorial illustration, clearly visible line work around faces, hair, clothing and objects, subtle cross-hatching and restrained paper-like grain, illustrated skin texture (no photographic skin blending), illustrated fabric texture with simplified folds and weight, lighting interpreted through drawing not camera optics, graphic-novel line emphasis, balanced contrast between figure and background. NO TEXT ON IMAGE. Single authentic moment captured mid-conversation, not staged, not symbolic."""
-
-
-def extract_decade(topic: str) -> str:
-    topic_lower = topic.lower()
-    decades = ["1950s", "1960s", "1970s", "1980s", "1990s", "2000s"]
-    for decade in decades:
-        if decade in topic_lower:
-            return decade
-    return "1980s"
-
-
-def build_knowledge_prompt(topic: str) -> str:
-    decade = extract_decade(topic)
-    elements = KNOWLEDGE_IMAGE_ELEMENTS["decades"].get(
-        decade, KNOWLEDGE_IMAGE_ELEMENTS["decades"]["1980s"]
-    )
-    moods = KNOWLEDGE_IMAGE_ELEMENTS["moods"]
-    locations = KNOWLEDGE_IMAGE_ELEMENTS["locations"]
-
-    music_ref = ", ".join(random.sample(elements, min(4, len(elements))))
-    mood = random.choice(moods)
-    location = random.choice(locations)
-
-    scene = f"""A beautiful anime scene showing anime characters in a {location}, {mood}. The setting reflects the era with {music_ref}. The atmosphere captures the essence of {topic}. Characters are in authentic period fashion, naturally enjoying music together."""
-    return f"""{scene} Style: {KNOWLEDGE_IMAGE_STYLE}"""
-
-
-def build_podcast_prompt(theme: str) -> str:
-    return f"""A refined graphic-novel documentary style scene in a podcast/broadcast studio appropriate for {theme}. Two podcast hosts are seated side by side at a shared wooden broadcast table equipped with studio microphones, headphones and authentic studio elements. {PODCAST_HOST_DANIEL} and {PODCAST_HOST_ANNABELLE} are mid-conversation, clearly visible from frontal view, seated together, natural conversational smiles (subtle, asymmetrical), relaxed engaged expressions, mouths slightly open or mid-speech. Both fully contained within a 16:9 horizontal composition. Clothing derived from {theme}. Subtle studio status sign if plausible. No text on image. Style: {PODCAST_STYLE}"""
 
 
 def generate_image(
@@ -191,12 +64,13 @@ def generate_image(
         payload["subject_reference"] = subject_reference
 
     print(f"Generating image (model: {model}, ratio: {aspect_ratio})...")
-    # Disable automatic decompression to avoid Brotli issues
-    response = requests.post(
-        url, headers=headers, json=payload, timeout=120, stream=True
-    )
+    response = requests.post(url, headers=headers, json=payload, timeout=120)
     response.raise_for_status()
     data = response.json()
+
+    if not data.get("data"):
+        print(f"API error: No 'data' field in response. Response: {data}")
+        return {"images": [], "model": model, "prompt": prompt}
 
     images = data.get("data", {}).get("image_base64") or data.get("data", {}).get(
         "image_urls", []
@@ -252,20 +126,7 @@ Examples:
     )
 
     parser.add_argument(
-        "prompt",
-        nargs="?",
-        help="Description of the desired image (1-2000 chars). Required unless --preset is used.",
-    )
-
-    preset_group = parser.add_argument_group("Presets (build prompt automatically)")
-    preset_group.add_argument(
-        "--preset",
-        choices=["knowledge", "podcast"],
-        help="Use a preset: 'knowledge' for anime 1980s music images, 'podcast' for documentary-style podcast hosts",
-    )
-    preset_group.add_argument(
-        "--theme",
-        help="Topic/theme for preset (e.g., 'From Soul to Modern Dance Music - 50 Tracks That Map the Journey')",
+        "prompt", help="Description of the desired image (1-2000 chars)"
     )
 
     parser.add_argument(
@@ -307,24 +168,6 @@ Examples:
         print("       or use --api-key argument.")
         return 1
 
-    if args.preset:
-        if not args.theme:
-            print("Error: --theme is required when using --preset")
-            return 1
-        if args.preset == "knowledge":
-            prompt = build_knowledge_prompt(args.theme)
-            if args.aspect_ratio == "1:1":
-                args.aspect_ratio = "3:2"
-        elif args.preset == "podcast":
-            prompt = build_podcast_prompt(args.theme)
-            args.aspect_ratio = "16:9"
-        print(f"Using preset '{args.preset}' with theme: {args.theme}")
-    else:
-        if not args.prompt:
-            print("Error: prompt is required when not using --preset")
-            return 1
-        prompt = args.prompt
-
     subject_reference = None
     if args.reference_url or args.reference_file:
         ref_image = None
@@ -344,7 +187,7 @@ Examples:
     try:
         result = generate_image(
             api_key=api_key,
-            prompt=prompt,
+            prompt=args.prompt,
             model=args.model,
             aspect_ratio=args.aspect_ratio,
             response_format=args.response_format,
@@ -356,7 +199,7 @@ Examples:
         if args.output_name:
             base_name = sanitize_filename(args.output_name)
         else:
-            base_name = sanitize_filename(prompt)[:50]
+            base_name = sanitize_filename(args.prompt)[:50]
 
         timestamp = int(time.time())
         output_path = os.path.join(args.output_dir, f"{base_name}_{timestamp}")
@@ -379,14 +222,11 @@ Examples:
         print(f"Saving metadata to {meta_path}...")
 
         with open(meta_path, "w", encoding="utf-8") as f:
-            f.write(f"Prompt: {prompt}\n")
+            f.write(f"Prompt: {args.prompt}\n")
             f.write(f"Model: {args.model}\n")
             f.write(f"Aspect Ratio: {args.aspect_ratio}\n")
             f.write(f"Response Format: {args.response_format}\n")
             f.write(f"Images Generated: {len(images)}\n")
-            if args.preset:
-                f.write(f"Preset: {args.preset}\n")
-                f.write(f"Theme: {args.theme}\n")
             if args.reference_url:
                 f.write(f"Reference URL: {args.reference_url}\n")
             if args.reference_file:
