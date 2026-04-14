@@ -32,6 +32,7 @@ images/
 videos/
 voices/
 speech/
+podcasts/
 *.mp3
 *.mp4
 *.wav

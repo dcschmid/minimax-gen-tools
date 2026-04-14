@@ -46,6 +46,12 @@ Generate songs, images, videos, and speech using the MiniMax API.
 - **Multiple formats** - MP3, WAV, PCM output
 - **Timestamp support** - Accurate sentence-level timestamps
 
+### Podcast Generator (`podcast_generator.py`)
+- **Multi-speaker podcasts** - Generate podcasts with multiple hosts
+- **Different voices** - Assign unique voices to each speaker
+- **Script parsing** - Automatically parses conversation format
+- **Combined output** - Single audio file with all segments
+
 ## Setup
 
 ```bash
@@ -294,6 +300,40 @@ python tts_async.py "Hello world" --voice-id "Chinese (Mandarin)_News_Anchor" \
   --speed 1.0 --pitch 1.5 --vol 1.2
 ```
 
+---
+
+## Podcast Generator
+
+Generate multi-speaker podcasts from script files.
+
+### Basic podcast
+
+```bash
+python podcast_generator.py --script podcast.txt
+```
+
+### With custom voices
+
+```bash
+python podcast_generator.py --script podcast.txt \
+  --voice-daniel "English_magnetic_voiced_man" \
+  --voice-annabelle "English_radiant_girl"
+```
+
+### Custom model and speed
+
+```bash
+python podcast_generator.py --script podcast.txt --model speech-02-turbo --speed 1.1
+```
+
+### Script Format
+
+```text
+daniel: Hello everyone, welcome to the show.
+annabelle: Thanks daniel, it's great to be here.
+daniel: Today we're discussing...
+```
+
 ## Options
 
 | Option | Description | Default |
@@ -392,6 +432,22 @@ python tts_async.py "Hello world" --voice-id "Chinese (Mandarin)_News_Anchor" \
 | `--format` | Audio format: mp3, wav, pcm | `mp3` |
 | `--channel` | Channels: 1 (mono), 2 (stereo) | `2` |
 | `--poll-interval` | Poll interval in seconds | `10` |
+
+### Podcast Generator Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--script` | Podcast script file (txt or md) | Required |
+| `--api-key` | MiniMax API key | Env: `MINIMAX_API_KEY` |
+| `--model` | Model to use | `speech-2.8-hd` |
+| `--voice-daniel` | Voice for Daniel | `English_magnetic_voiced_man` |
+| `--voice-annabelle` | Voice for Annabelle | `English_radiant_girl` |
+| `--speed` | Speech speed | `1.0` |
+| `--sample-rate` | Sample rate in Hz | `32000` |
+| `--bitrate` | Bitrate in bps | `128000` |
+| `--format` | Audio format: mp3, wav | `mp3` |
+| `--output-dir` | Output directory | `podcasts` |
+| `--output-name` | Custom output filename | - |
 
 ## Models
 
