@@ -16,7 +16,6 @@ import requests
 import argparse
 import base64
 import time
-import random
 
 try:
     from dotenv import load_dotenv
@@ -28,19 +27,6 @@ except ImportError:
 from utils import resolve_api_key, sanitize_filename
 
 
-KNOWLEDGE_IMAGE_SCENES = [
-    "A Japanese anime street scene with young people gathered around a record store listening to cassettes, vinyl scattered on the sidewalk, a transistor radio playing, classic 80s anime character designs with bold outlines and cel-shaded shadows",
-    "An anime concert venue filled with silhouetted fans watching a small stage where musicians perform, neon signs in Japanese katakana glowing softly in the background, 80s Tokyo atmosphere with steam rising from street grates",
-    "A cozy Japanese apartment interior with a young person at a desk writing lyrics by hand, cassette tapes stacked beside an open window showing a rainy cityscape, warm interior lighting, anime style with strong black outlines",
-    "An anime street vendor selling bootleg cassettes from a bicycle cart in a bustling Shinjuku alley, late night setting with neon reflections on wet pavement, two young fans inspecting tapes under a flickering streetlight",
-    "A vintage Japanese record shop interior with floor-to-ceiling shelves of vinyl and cassettes, a listening booth in the corner where two anime characters share headphones, detailed cel-shaded illustration style",
-    "An anime scene of friends riding bikes through a cherry blossom path, one wearing headphones connected to a Walkman on the handlebars, soft pink petals falling, warm spring afternoon light, 80s fashion",
-    "A Japanese radio station broadcast room in anime style, a young woman with headphones adjusting vintage equipment, reel-to-reel tapes on the desk, soft glow from VU meters, 80s aesthetic",
-    "An anime music video shoot set with neon tubes and a small stage, a singer performing with a synthesizer, film crew as silhouettes in the background, cinematic 80s production feel",
-    "A Japanese high school gym converted into a live music venue, band performing on stage with heavy equipment, students dancing, banners hanging from the ceiling, energetic anime atmosphere",
-    "A quiet moment in an anime character's bedroom filled with music posters on walls, a turntable spinning, music sheets scattered on the floor, afternoon sunlight through curtains, personal and intimate",
-]
-
 KNOWLEDGE_IMAGE_STYLE = """Japanese Anime Style from the 1980s with bold outlines, slightly exaggerated facial features, and cel-shaded shadows typical of hand-drawn animation. Vibrant but slightly desaturated colors. NO TEXT ON THE IMAGE. Single scene only, not a series. Creative but consistent anime aesthetic, varied scenes matching the musical theme. Refined graphic-novel realism, clearly visible line work, subtle cross-hatching, illustrated texture on skin and fabric. No photographic elements, no camera effects, no depth falloff."""
 
 PODCAST_HOST_DANIEL = "Daniel, European type, mid-40s, shoulder-length dark hair neatly groomed, well-groomed beard, glasses, calm intelligent expression, grounded confident presence, seated at broadcast table"
@@ -51,8 +37,7 @@ PODCAST_STYLE = """hand-drawn illustrated documentary style, high-quality printe
 
 
 def build_knowledge_prompt(topic: str) -> str:
-    scene = random.choice(KNOWLEDGE_IMAGE_SCENES)
-    return f"""{scene}. Topic: {topic}. Style: {KNOWLEDGE_IMAGE_STYLE}"""
+    return f"""{topic}. Style: {KNOWLEDGE_IMAGE_STYLE}"""
 
 
 def build_podcast_prompt(theme: str) -> str:
