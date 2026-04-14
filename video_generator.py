@@ -61,8 +61,18 @@ def create_video_task(
 
     print(f"Creating video task (model: {model}, duration: {duration}s)...")
     response = requests.post(url, headers=headers, json=payload, timeout=60)
+    response_json = response.json()
+    print(f"  Response: {response_json}")
+
+    base_resp = response_json.get("base_resp", {})
+    if base_resp.get("status_code") != 0:
+        status_msg = base_resp.get("status_msg", "Unknown error")
+        raise Exception(f"API Error {base_resp.get('status_code')}: {status_msg}")
+
     response.raise_for_status()
-    task_id = response.json()["task_id"]
+    task_id = response_json.get("task_id")
+    if not task_id:
+        raise Exception(f"No task_id in response: {response_json}")
     return task_id
 
 
@@ -81,11 +91,24 @@ def query_task_status(api_key: str, task_id: str, poll_interval: int = 10) -> st
         response = requests.get(url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
         response_json = response.json()
-        status = response_json["status"]
+
+        status = response_json.get("status")
+        print(f"  Raw response: {response_json}")
+
+        if not status:
+            base_resp = response_json.get("base_resp", {})
+            if base_resp.get("status_code") != 0:
+                status_msg = base_resp.get("status_msg", "Unknown error")
+                raise Exception(
+                    f"API Error {base_resp.get('status_code')}: {status_msg}"
+                )
+            print("  Empty status, retrying...")
+            continue
+
         print(f"  Status: {status}")
 
         if status == "Success":
-            return response_json["file_id"]
+            return response_json.get("file_id")
         elif status == "Fail":
             raise Exception(
                 f"Video generation failed: {response_json.get('error_message', 'Unknown error')}"
@@ -150,11 +173,12 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Text-to-Video
-  python video_generator.py "A dancer doing flips on a beach"
-
-  # Image-to-Video
+  # Image-to-Video (default model requires first-frame image)
   python video_generator.py "The person starts dancing" --first-frame "photo.jpg"
+
+  # Image-to-Video with URL
+  python video_generator.py "The person starts dancing" \\
+    --first-frame "https://example.com/photo.jpg"
 
   # First-Last-Frame Video
   python video_generator.py "A girl growing up" \\
@@ -162,14 +186,10 @@ Examples:
 
   # Subject Reference (character consistency)
   python video_generator.py "The model walking in a historic alleyway" \\
-    --subject-reference "face_photo.jpg"
+    --first-frame "photo.jpg" --subject-reference "face_photo.jpg"
 
-  # Custom duration and resolution
-  python video_generator.py "Cinematic drone shot" --duration 10 --resolution 1080P
-
-  # Different model
-  python video_generator.py "Subject video" --model S2V-01 \\
-    --subject-reference "person.jpg"
+  # Custom duration
+  python video_generator.py "Cinematic drone shot" --duration 10
         """,
     )
 
@@ -183,8 +203,8 @@ Examples:
 
     parser.add_argument(
         "--model",
-        default="MiniMax-Hailuo-2.3",
-        help="Model to use (default: MiniMax-Hailuo-2.3)",
+        default="MiniMax-Hailuo-2.3-Fast",
+        help="Model to use (default: MiniMax-Hailuo-2.3-Fast, requires --first-frame)",
     )
 
     parser.add_argument(
@@ -197,9 +217,9 @@ Examples:
 
     parser.add_argument(
         "--resolution",
-        default="1080P",
-        choices=["720P", "1080P"],
-        help="Video resolution (default: 1080P)",
+        default="768P",
+        choices=["512P", "768P", "1080P"],
+        help="Video resolution (default: 768P)",
     )
 
     parser.add_argument("--first-frame", help="First frame image (URL or local file)")

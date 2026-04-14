@@ -179,16 +179,17 @@ python image_generator.py "Digital artwork" --output-dir my_images --output-name
 
 Note: Video generation is asynchronous. The script polls for completion automatically.
 
-### Text-to-Video
-
-```bash
-python video_generator.py "A dancer doing flips on a beach"
-```
-
-### Image-to-Video
+### Image-to-Video (default model requires first-frame)
 
 ```bash
 python video_generator.py "The person starts dancing" --first-frame "photo.jpg"
+```
+
+### Image-to-Video with URL
+
+```bash
+python video_generator.py "The person starts dancing" \
+  --first-frame "https://example.com/photo.jpg"
 ```
 
 ### First-Last-Frame Video
@@ -200,19 +201,14 @@ python video_generator.py "A girl growing up" --first-frame "child.jpg" --last-f
 ### Subject Reference (character consistency)
 
 ```bash
-python video_generator.py "The model walking in a historic alleyway" --subject-reference "face_photo.jpg"
+python video_generator.py "The model walking in a historic alleyway" \
+  --first-frame "photo.jpg" --subject-reference "face_photo.jpg"
 ```
 
-### Different duration and resolution
+### Custom duration
 
 ```bash
-python video_generator.py "Cinematic drone shot" --duration 10 --resolution 1080P
-```
-
-### Custom model
-
-```bash
-python video_generator.py "Subject video" --model S2V-01 --subject-reference "person.jpg"
+python video_generator.py "Cinematic drone shot" --duration 10
 ```
 
 ---
@@ -376,10 +372,10 @@ daniel: Today we're discussing...
 |--------|-------------|---------|
 | `prompt` | Video description (1-2000 chars) | Required |
 | `--api-key` | MiniMax API key | Env: `MINIMAX_API_KEY` |
-| `--model` | Model to use | `MiniMax-Hailuo-2.3` |
+| `--model` | Model to use | `MiniMax-Hailuo-2.3-Fast` |
 | `--duration` | Video duration: 5, 10 seconds | `6` |
-| `--resolution` | Resolution: 720P, 1080P | `1080P` |
-| `--first-frame` | First frame image (URL or local file) | - |
+| `--resolution` | Resolution: 512P, 768P, 1080P | `768P` |
+| `--first-frame` | First frame image (URL or local file) | Required |
 | `--last-frame` | Last frame image (URL or local file) | - |
 | `--subject-reference` | Subject reference image for character | - |
 | `--poll-interval` | Poll interval in seconds | `10` |
