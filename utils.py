@@ -66,7 +66,7 @@ def poll_task_status(
             raise Exception(f"Polling request failed: {e}")
 
         status = data.get("status")
-        print(f"  Status: {status}")
+        print(f"  Status: {status!r} | Resp: {data}")
 
         if status == "Success":
             return data

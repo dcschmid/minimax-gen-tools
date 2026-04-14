@@ -91,7 +91,13 @@ def generate_tts(
 
     response = requests.post(url, headers=headers, json=payload, timeout=60)
     response.raise_for_status()
-    task_id = response.json().get("task_id")
+    resp_data = response.json()
+    base_resp = resp_data.get("base_resp", {})
+    if base_resp.get("status_code") != 0:
+        raise Exception(
+            f"TTS API error: {base_resp.get('status_code')} - {base_resp.get('status_msg')}"
+        )
+    task_id = resp_data.get("task_id")
 
     status_url = f"https://api.minimax.io/v1/query/t2a_async_query_v2?task_id={task_id}"
     print(f"  Polling task status...")
