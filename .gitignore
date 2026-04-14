@@ -29,7 +29,9 @@ build/
 # Generated content
 songs/
 images/
+videos/
 *.mp3
+*.mp4
 *.wav
 *.pcm
 *.hex

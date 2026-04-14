@@ -1,6 +1,6 @@
-# Song & Image Generator
+# Song, Image & Video Generator
 
-Generate songs with lyrics and images using the MiniMax API.
+Generate songs, images, and videos using the MiniMax API.
 
 ## Features
 
@@ -20,6 +20,14 @@ Generate songs with lyrics and images using the MiniMax API.
 - **Image-to-Image** - Generate images with reference character consistency
 - **Multiple aspect ratios** - 1:1, 16:9, 4:3, 3:2, 2:3, 3:4, 9:16, 21:9
 - **Character consistency** - Use reference images to maintain subject identity
+
+### Video Generator (`video_generator.py`)
+- **Text-to-Video** - Generate videos from text descriptions
+- **Image-to-Video** - Animate static images into videos
+- **First-Last-Frame Video** - Specify start and end frames
+- **Subject Reference** - Maintain character consistency using face photos
+- **Multiple resolutions** - 720P and 1080P output
+- **Configurable duration** - 5 or 10 second clips
 
 ## Setup
 
@@ -142,6 +150,48 @@ python image_generator.py "Abstract art" --response-format url
 python image_generator.py "Digital artwork" --output-dir my_images --output-name artwork1
 ```
 
+---
+
+## Video Generator
+
+Note: Video generation is asynchronous. The script polls for completion automatically.
+
+### Text-to-Video
+
+```bash
+python video_generator.py "A dancer doing flips on a beach"
+```
+
+### Image-to-Video
+
+```bash
+python video_generator.py "The person starts dancing" --first-frame "photo.jpg"
+```
+
+### First-Last-Frame Video
+
+```bash
+python video_generator.py "A girl growing up" --first-frame "child.jpg" --last-frame "adult.jpg"
+```
+
+### Subject Reference (character consistency)
+
+```bash
+python video_generator.py "The model walking in a historic alleyway" --subject-reference "face_photo.jpg"
+```
+
+### Different duration and resolution
+
+```bash
+python video_generator.py "Cinematic drone shot" --duration 10 --resolution 1080P
+```
+
+### Custom model
+
+```bash
+python video_generator.py "Subject video" --model S2V-01 --subject-reference "person.jpg"
+```
+
 ## Options
 
 | Option | Description | Default |
@@ -178,6 +228,22 @@ python image_generator.py "Digital artwork" --output-dir my_images --output-name
 | `--output-dir` | Output directory | `images` |
 | `--output-name` | Custom output filename | - |
 
+### Video Generator Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `prompt` | Video description (1-2000 chars) | Required |
+| `--api-key` | MiniMax API key | Env: `MINIMAX_API_KEY` |
+| `--model` | Model to use | `MiniMax-Hailuo-2.3` |
+| `--duration` | Video duration: 5, 10 seconds | `6` |
+| `--resolution` | Resolution: 720P, 1080P | `1080P` |
+| `--first-frame` | First frame image (URL or local file) | - |
+| `--last-frame` | Last frame image (URL or local file) | - |
+| `--subject-reference` | Subject reference image for character | - |
+| `--poll-interval` | Poll interval in seconds | `10` |
+| `--output-dir` | Output directory | `videos` |
+| `--output-name` | Custom output filename | - |
+
 ## Models
 
 | Model | Description |
@@ -203,4 +269,5 @@ songs/A_joyful_pop_song_about_s_1744500000/
 - [Music Generation](https://platform.minimax.io/docs/guides/music-generation)
 - [Lyrics Generation](https://platform.minimax.io/docs/guides/lyrics-generation)
 - [Image Generation](https://platform.minimax.io/docs/guides/image-generation)
+- [Video Generation](https://platform.minimax.io/docs/guides/video-generation)
 - [API Reference](https://platform.minimax.io/docs/api-reference/music-generation)
