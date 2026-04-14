@@ -69,6 +69,7 @@ def generate_image(
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
+        "Accept-Encoding": "identity",
     }
     payload = {
         "model": model,
@@ -81,7 +82,10 @@ def generate_image(
         payload["subject_reference"] = subject_reference
 
     print(f"Generating image (model: {model}, ratio: {aspect_ratio})...")
-    response = requests.post(url, headers=headers, json=payload, timeout=120)
+    # Disable automatic decompression to avoid Brotli issues
+    response = requests.post(
+        url, headers=headers, json=payload, timeout=120, stream=True
+    )
     response.raise_for_status()
     data = response.json()
 
