@@ -67,7 +67,7 @@ def create_tts_task(
             "voice_id": voice_id,
             "speed": speed,
             "vol": vol,
-            "pitch": pitch,
+            "pitch": int(pitch),
         },
         "audio_setting": {
             "audio_sample_rate": sample_rate,

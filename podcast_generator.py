@@ -79,7 +79,7 @@ def generate_tts(
             "voice_id": voice_id,
             "speed": speed,
             "vol": 1.0,
-            "pitch": pitch,
+            "pitch": int(pitch),
         },
         "audio_setting": {
             "audio_sample_rate": sample_rate,
