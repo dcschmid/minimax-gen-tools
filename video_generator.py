@@ -16,7 +16,6 @@ import argparse
 import base64
 import time
 
-
 try:
     from dotenv import load_dotenv
 
@@ -24,21 +23,21 @@ try:
 except ImportError:
     pass
 
+from utils import resolve_api_key, sanitize_filename, poll_task_status
+
 
 def create_video_task(
     api_key: str,
     prompt: str,
-    model: str = "MiniMax-Hailuo-2.3",
+    model: str = "MiniMax-Hailuo-2.3-Fast",
     duration: int = 6,
-    resolution: str = "1080P",
+    resolution: str = "768P",
     first_frame_image: str = None,
     last_frame_image: str = None,
     subject_reference: list = None,
 ) -> str:
     """
     Creates a video generation task and returns task_id.
-
-    Returns str: task_id
     """
     url = "https://api.minimax.io/v1/video_generation"
     headers = {
@@ -76,43 +75,49 @@ def create_video_task(
     return task_id
 
 
-def query_task_status(api_key: str, task_id: str, poll_interval: int = 10) -> str:
+def query_video_status(api_key: str, task_id: str, poll_interval: int = 10) -> str:
     """
-    Polls task status until success or failure.
+    Polls video task status until success or failure.
     Returns file_id on success.
     """
     url = "https://api.minimax.io/v1/query/video_generation"
     headers = {"Authorization": f"Bearer {api_key}"}
     params = {"task_id": task_id}
+    status_url = f"{url}?task_id={task_id}"
 
     print(f"Polling task status (interval: {poll_interval}s)...")
-    while True:
-        time.sleep(poll_interval)
+
+    def check_status():
         response = requests.get(url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
-        response_json = response.json()
+        return response.json()
 
-        status = response_json.get("status")
-        print(f"  Raw response: {response_json}")
-
-        if not status:
-            base_resp = response_json.get("base_resp", {})
-            if base_resp.get("status_code") != 0:
-                status_msg = base_resp.get("status_msg", "Unknown error")
-                raise Exception(
-                    f"API Error {base_resp.get('status_code')}: {status_msg}"
-                )
-            print("  Empty status, retrying...")
-            continue
-
-        print(f"  Status: {status}")
-
-        if status == "Success":
-            return response_json.get("file_id")
-        elif status == "Fail":
+    try:
+        result = poll_task_status(
+            api_key,
+            status_url,
+            poll_interval=poll_interval,
+            max_retries=200,
+            timeout_seconds=3600,
+        )
+    except Exception as e:
+        if "timeout" in str(e).lower() or "exceeded" in str(e).lower():
             raise Exception(
-                f"Video generation failed: {response_json.get('error_message', 'Unknown error')}"
+                f"Video generation timeout. Task may still be processing. Check later with task_id: {task_id}"
             )
+        raise
+
+    status = result.get("status")
+    print(f"  Status: {status}")
+
+    if status == "Success":
+        return result.get("file_id")
+    elif status == "Fail":
+        raise Exception(
+            f"Video generation failed: {result.get('error_message', 'Unknown error')}"
+        )
+
+    raise Exception(f"Unexpected status: {status}")
 
 
 def fetch_video(api_key: str, file_id: str, output_path: str) -> None:
@@ -135,22 +140,6 @@ def fetch_video(api_key: str, file_id: str, output_path: str) -> None:
         f.write(response.content)
 
     print(f"Video saved to: {output_path}")
-
-
-def resolve_api_key(api_key: str) -> str:
-    """Resolves API key from argument or environment variable."""
-    if api_key:
-        return api_key
-    env_key = os.environ.get("MINIMAX_API_KEY") or os.environ.get("MINIMAX_API_TOKEN")
-    if env_key:
-        return env_key
-    return None
-
-
-def sanitize_filename(name: str) -> str:
-    """Removes invalid characters from a filename."""
-    keepcharacters = " ._-"
-    return "".join(c for c in name if c.isalnum() or c in keepcharacters).strip()
 
 
 def load_image(image_source: str) -> str:
@@ -294,7 +283,7 @@ Examples:
         )
         print(f"Task ID: {task_id}")
 
-        file_id = query_task_status(api_key, task_id, args.poll_interval)
+        file_id = query_video_status(api_key, task_id, args.poll_interval)
         print(f"File ID: {file_id}")
 
         fetch_video(api_key, file_id, video_path)

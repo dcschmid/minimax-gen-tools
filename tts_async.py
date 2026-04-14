@@ -16,13 +16,14 @@ import requests
 import argparse
 import time
 
-
 try:
     from dotenv import load_dotenv
 
     load_dotenv()
 except ImportError:
     pass
+
+from utils import resolve_api_key, sanitize_filename, poll_task_status
 
 
 MODELS = [
@@ -94,29 +95,6 @@ def create_tts_task(
     return task_id
 
 
-def query_task_status(api_key: str, task_id: str, poll_interval: int = 10) -> dict:
-    """
-    Polls task status until completion.
-    Returns dict with status info including file_id on success.
-    """
-    url = f"https://api.minimax.io/v1/query/t2a_async_query_v2?task_id={task_id}"
-    headers = {"Authorization": f"Bearer {api_key}"}
-
-    print(f"Polling task status (interval: {poll_interval}s)...")
-    while True:
-        time.sleep(poll_interval)
-        response = requests.get(url, headers=headers, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        status = data.get("status")
-        print(f"  Status: {status}")
-
-        if status == "Success":
-            return data
-        elif status == "Fail":
-            raise Exception(f"TTS failed: {data.get('error_message', 'Unknown error')}")
-
-
 def download_audio(api_key: str, file_id: str, output_path: str) -> None:
     """Downloads the generated audio file."""
     url = f"https://api.minimax.io/v1/files/retrieve_content?file_id={file_id}"
@@ -130,22 +108,6 @@ def download_audio(api_key: str, file_id: str, output_path: str) -> None:
         f.write(response.content)
 
     print(f"Audio saved to: {output_path}")
-
-
-def resolve_api_key(api_key: str) -> str:
-    """Resolves API key from argument or environment variable."""
-    if api_key:
-        return api_key
-    env_key = os.environ.get("MINIMAX_API_KEY") or os.environ.get("MINIMAX_API_TOKEN")
-    if env_key:
-        return env_key
-    return None
-
-
-def sanitize_filename(name: str) -> str:
-    """Removes invalid characters from a filename."""
-    keepcharacters = " ._-"
-    return "".join(c for c in name if c.isalnum() or c in keepcharacters).strip()
 
 
 def main():
@@ -168,9 +130,6 @@ Examples:
 
   # Custom speed and pitch
   python tts_async.py "Hello world" --speed 1.2 --pitch 2 --vol 1.5
-
-  # Custom model
-  python tts_async.py "Hello world" --model speech-02-turbo
 
 Voice Effects: spacious_echo, small_room, large_hall, ethereal_echo, resonant_hall
         """,
@@ -317,7 +276,17 @@ Voice Effects: spacious_echo, small_room, large_hall, ethereal_echo, resonant_ha
         )
         print(f"Task ID: {task_id}")
 
-        result = query_task_status(api_key, task_id, args.poll_interval)
+        status_url = (
+            f"https://api.minimax.io/v1/query/t2a_async_query_v2?task_id={task_id}"
+        )
+        print(f"Polling task status (interval: {args.poll_interval}s)...")
+        result = poll_task_status(
+            api_key,
+            status_url,
+            poll_interval=args.poll_interval,
+            max_retries=60,
+            timeout_seconds=600,
+        )
 
         file_id = result.get("file_id")
         if not file_id:

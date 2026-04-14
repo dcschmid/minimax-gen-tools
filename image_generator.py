@@ -16,13 +16,14 @@ import argparse
 import base64
 import time
 
-
 try:
     from dotenv import load_dotenv
 
     load_dotenv()
 except ImportError:
     pass
+
+from utils import resolve_api_key, sanitize_filename
 
 
 def generate_image(
@@ -83,22 +84,6 @@ def download_file(url: str, filepath: str) -> None:
     response.raise_for_status()
     with open(filepath, "wb") as f:
         f.write(response.content)
-
-
-def sanitize_filename(name: str) -> str:
-    """Removes invalid characters from a filename."""
-    keepcharacters = " ._-"
-    return "".join(c for c in name if c.isalnum() or c in keepcharacters).strip()
-
-
-def resolve_api_key(api_key: str) -> str:
-    """Resolves API key from argument or environment variable."""
-    if api_key:
-        return api_key
-    env_key = os.environ.get("MINIMAX_API_KEY") or os.environ.get("MINIMAX_API_TOKEN")
-    if env_key:
-        return env_key
-    return None
 
 
 def main():

@@ -17,16 +17,23 @@ import argparse
 import base64
 import time
 
-# Auto-load .env file
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
-    pass  # python-dotenv not installed, use environment variables only
+    pass
+
+from utils import resolve_api_key, sanitize_filename
 
 
-def generate_lyrics(api_key: str, prompt: str, mode: str = "write_full_song",
-                    existing_lyrics: str = None, title: str = None) -> dict:
+def generate_lyrics(
+    api_key: str,
+    prompt: str,
+    mode: str = "write_full_song",
+    existing_lyrics: str = None,
+    title: str = None,
+) -> dict:
     """
     Generates or edits lyrics based on the prompt.
 
@@ -59,18 +66,21 @@ def generate_lyrics(api_key: str, prompt: str, mode: str = "write_full_song",
     }
 
 
-def generate_music(api_key: str, prompt: str,
-                   model: str = "music-2.6",
-                   lyrics: str = None,
-                   instrumental: bool = False,
-                   audio_url: str = None,
-                   audio_base64: str = None,
-                   output_format: str = "url",
-                   sample_rate: int = 44100,
-                   bitrate: int = 256000,
-                   audio_format: str = "mp3",
-                   lyrics_optimizer: bool = False,
-                   stream: bool = False) -> dict:
+def generate_music(
+    api_key: str,
+    prompt: str,
+    model: str = "music-2.6",
+    lyrics: str = None,
+    instrumental: bool = False,
+    audio_url: str = None,
+    audio_base64: str = None,
+    output_format: str = "url",
+    sample_rate: int = 44100,
+    bitrate: int = 256000,
+    audio_format: str = "mp3",
+    lyrics_optimizer: bool = False,
+    stream: bool = False,
+) -> dict:
     """
     Creates music track using the MiniMax API.
 
@@ -140,22 +150,6 @@ def read_file(filepath: str) -> str:
         return f.read()
 
 
-def sanitize_filename(name: str) -> str:
-    """Removes invalid characters from a filename."""
-    keepcharacters = " ._-"
-    return "".join(c for c in name if c.isalnum() or c in keepcharacters).strip()
-
-
-def resolve_api_key(api_key: str) -> str:
-    """Resolves API key from argument or environment variable."""
-    if api_key:
-        return api_key
-    env_key = os.environ.get("MINIMAX_API_KEY") or os.environ.get("MINIMAX_API_TOKEN")
-    if env_key:
-        return env_key
-    return None
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Song Generator using MiniMax API",
@@ -185,26 +179,34 @@ Examples:
 
   # With title preservation
   python song_generator.py "Upbeat summer hit" --title "Sunshine Days"
-        """
+        """,
     )
 
     # Required
     parser.add_argument("prompt", help="Description of the desired song (1-2000 chars)")
 
     # API options
-    parser.add_argument("--api-key", help="MiniMax API key (or set MINIMAX_API_KEY env var)")
+    parser.add_argument(
+        "--api-key", help="MiniMax API key (or set MINIMAX_API_KEY env var)"
+    )
 
     # Model selection
-    parser.add_argument("--model", default="music-2.6",
-                        choices=["music-2.6", "music-cover", "music-2.6-free", "music-cover-free"],
-                        help="Model to use (default: music-2.6)")
+    parser.add_argument(
+        "--model",
+        default="music-2.6",
+        choices=["music-2.6", "music-cover", "music-2.6-free", "music-cover-free"],
+        help="Model to use (default: music-2.6)",
+    )
 
     # Lyrics options (mutually exclusive)
     lyrics_group = parser.add_mutually_exclusive_group()
     lyrics_group.add_argument("--lyrics", help="Custom lyrics for the song")
     lyrics_group.add_argument("--lyrics-file", help="File containing custom lyrics")
-    lyrics_group.add_argument("--lyrics-optimizer", action="store_true",
-                              help="Auto-generate lyrics from prompt (no separate lyrics call)")
+    lyrics_group.add_argument(
+        "--lyrics-optimizer",
+        action="store_true",
+        help="Auto-generate lyrics from prompt (no separate lyrics call)",
+    )
 
     # Lyrics editing
     parser.add_argument("--edit-lyrics", help="Edit existing lyrics (filename or text)")
@@ -212,27 +214,50 @@ Examples:
 
     # Cover audio
     cover_group = parser.add_argument_group("Cover audio (for music-cover model)")
-    cover_group.add_argument("--audio-url", help="URL of reference audio (6 sec - 6 min, max 50MB)")
-    cover_group.add_argument("--audio-file", help="Local reference audio file for cover generation")
+    cover_group.add_argument(
+        "--audio-url", help="URL of reference audio (6 sec - 6 min, max 50MB)"
+    )
+    cover_group.add_argument(
+        "--audio-file", help="Local reference audio file for cover generation"
+    )
 
     # Output options
     parser.add_argument("--output-dir", default="songs", help="Output directory")
-    parser.add_argument("--output-format", default="url", choices=["url", "hex"],
-                        help="Output format: url (download link) or hex (encoded audio)")
-    parser.add_argument("--format", default="mp3", choices=["mp3", "wav", "pcm"],
-                        help="Audio format (default: mp3)")
-    parser.add_argument("--sample-rate", type=int, default=44100,
-                        help="Sample rate in Hz (default: 44100)")
-    parser.add_argument("--bitrate", type=int, default=256000,
-                        help="Bitrate in bps (default: 256000)")
+    parser.add_argument(
+        "--output-format",
+        default="url",
+        choices=["url", "hex"],
+        help="Output format: url (download link) or hex (encoded audio)",
+    )
+    parser.add_argument(
+        "--format",
+        default="mp3",
+        choices=["mp3", "wav", "pcm"],
+        help="Audio format (default: mp3)",
+    )
+    parser.add_argument(
+        "--sample-rate",
+        type=int,
+        default=44100,
+        help="Sample rate in Hz (default: 44100)",
+    )
+    parser.add_argument(
+        "--bitrate", type=int, default=256000, help="Bitrate in bps (default: 256000)"
+    )
 
     # Instrumental mode
-    parser.add_argument("--instrumental", action="store_true",
-                        help="Generate instrumental track (no vocals)")
+    parser.add_argument(
+        "--instrumental",
+        action="store_true",
+        help="Generate instrumental track (no vocals)",
+    )
 
     # Streaming mode
-    parser.add_argument("--stream", action="store_true",
-                        help="Enable streaming mode (returns hex audio)")
+    parser.add_argument(
+        "--stream",
+        action="store_true",
+        help="Enable streaming mode (returns hex audio)",
+    )
 
     args = parser.parse_args()
 
@@ -258,8 +283,13 @@ Examples:
             existing_lyrics = read_file(args.edit_lyrics)
         else:
             existing_lyrics = args.edit_lyrics
-        result = generate_lyrics(api_key, args.prompt, mode="edit",
-                                existing_lyrics=existing_lyrics, title=args.title)
+        result = generate_lyrics(
+            api_key,
+            args.prompt,
+            mode="edit",
+            existing_lyrics=existing_lyrics,
+            title=args.title,
+        )
         lyrics = result["lyrics"]
         song_title = result.get("song_title")
         style_tags = result.get("style_tags")

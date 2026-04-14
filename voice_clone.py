@@ -13,13 +13,14 @@ import requests
 import argparse
 import time
 
-
 try:
     from dotenv import load_dotenv
 
     load_dotenv()
 except ImportError:
     pass
+
+from utils import resolve_api_key
 
 
 def upload_file(api_key: str, filepath: str, purpose: str) -> str:
@@ -77,16 +78,6 @@ def clone_voice(
     response = requests.post(url, headers=headers, json=payload, timeout=60)
     response.raise_for_status()
     return response.json()
-
-
-def resolve_api_key(api_key: str) -> str:
-    """Resolves API key from argument or environment variable."""
-    if api_key:
-        return api_key
-    env_key = os.environ.get("MINIMAX_API_KEY") or os.environ.get("MINIMAX_API_TOKEN")
-    if env_key:
-        return env_key
-    return None
 
 
 def main():

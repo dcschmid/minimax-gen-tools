@@ -14,7 +14,7 @@ import re
 import requests
 import argparse
 import time
-
+import struct
 
 try:
     from dotenv import load_dotenv
@@ -22,6 +22,8 @@ try:
     load_dotenv()
 except ImportError:
     pass
+
+from utils import resolve_api_key, sanitize_filename, poll_task_status
 
 
 MODELS = [
@@ -91,19 +93,13 @@ def generate_tts(
     response.raise_for_status()
     task_id = response.json().get("task_id")
 
-    while True:
-        time.sleep(5)
-        status_url = (
-            f"https://api.minimax.io/v1/query/t2a_async_query_v2?task_id={task_id}"
-        )
-        status_response = requests.get(status_url, headers=headers, timeout=30)
-        status_data = status_response.json()
+    status_url = f"https://api.minimax.io/v1/query/t2a_async_query_v2?task_id={task_id}"
+    print(f"  Polling task status...")
+    result = poll_task_status(
+        api_key, status_url, poll_interval=5, max_retries=60, timeout_seconds=600
+    )
 
-        if status_data.get("status") == "Success":
-            file_id = status_data.get("file_id")
-            break
-        elif status_data.get("status") == "Fail":
-            raise Exception(f"TTS failed: {status_data.get('error_message')}")
+    file_id = result.get("file_id")
 
     download_url = f"https://api.minimax.io/v1/files/retrieve_content?file_id={file_id}"
     audio_response = requests.get(download_url, headers=headers, timeout=600)
@@ -112,10 +108,10 @@ def generate_tts(
     return audio_response.content
 
 
-def create_silence(duration_ms: int, sample_rate: int = 32000) -> bytes:
+def create_silence_mp3(duration_ms: int, sample_rate: int = 32000) -> bytes:
     """
-    Creates a silent MP3 segment using pydub or raw bytes.
-    Returns silence as MP3 bytes.
+    Creates a silent MP3 segment using pydub.
+    Falls back to valid silent WAV if pydub unavailable.
     """
     try:
         from pydub import AudioSegment
@@ -123,64 +119,36 @@ def create_silence(duration_ms: int, sample_rate: int = 32000) -> bytes:
         silence = AudioSegment.silent(duration=duration_ms, frame_rate=sample_rate)
         return silence.export(format="mp3").read()
     except ImportError:
+        pass
+
+    try:
+        import io
+        import wave
+
         num_samples = int(sample_rate * duration_ms / 1000)
-        return bytes(num_samples)
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(bytes(num_samples * 2))
+        return buffer.getvalue()
+    except ImportError:
+        num_samples = int(sample_rate * duration_ms / 1000)
+        return struct.pack("<" + "h" * num_samples, *([0] * num_samples))
 
 
 def add_natural_pauses(text: str) -> str:
     """
     Adds natural pauses indicators to make speech more conversational.
-    Adds micro-pauses after commas, semicolons, and before 'but', 'and', 'so'.
     """
     text = re.sub(r",(\s+)", r", ... ", text)
     text = re.sub(r";(\s+)", r"; ... ", text)
     text = re.sub(r"\.(\s+[A-Z])", r". ... \1", text)
     text = re.sub(r"\?(\s+[A-Z])", r"? ... \1", text)
     text = re.sub(r"!(\s+[A-Z])", r"! ... \1", text)
-
     text = re.sub(r"\s+", " ", text)
     return text.strip()
-
-
-def split_into_conversational_chunks(text: str, max_length: int = 150) -> list:
-    """
-    Splits text into smaller, natural conversational chunks.
-    Respects punctuation and keeps phrases readable.
-    """
-    if len(text) <= max_length:
-        return [text]
-
-    chunks = []
-
-    separators = [". ", "? ", "! ", "; ", ", "]
-
-    current_chunk = []
-    current_length = 0
-
-    words = text.split()
-
-    for word in words:
-        word_len = len(word)
-
-        if current_length + word_len > max_length and current_chunk:
-            chunks.append(" ".join(current_chunk))
-            current_chunk = []
-            current_length = 0
-
-        current_chunk.append(word)
-        current_length += word_len + 1
-
-    if current_chunk:
-        chunks.append(" ".join(current_chunk))
-
-    merged = []
-    for chunk in chunks:
-        if merged and len(merged[-1]) + len(chunk) < max_length * 1.2:
-            merged[-1] = merged[-1] + " " + chunk
-        else:
-            merged.append(chunk)
-
-    return merged if merged else [text]
 
 
 def parse_podcast_script(script_text: str) -> list:
@@ -229,65 +197,50 @@ def combine_audio_with_pauses(
     """
     Combines audio segments with natural pauses between speakers.
     """
-    import struct
-    import wave
-
     temp_dir = os.path.join(os.path.dirname(output_path) or ".", "temp_podcast")
     os.makedirs(temp_dir, exist_ok=True)
 
     segment_files = []
     pause_files = []
 
-    for i, (speaker, audio_data) in enumerate(audio_segments):
-        seg_path = os.path.join(temp_dir, f"segment_{i:04d}.mp3")
-        with open(seg_path, "wb") as f:
-            f.write(audio_data)
-        segment_files.append(seg_path)
+    try:
+        for i, (speaker, audio_data) in enumerate(audio_segments):
+            seg_path = os.path.join(temp_dir, f"segment_{i:04d}.mp3")
+            with open(seg_path, "wb") as f:
+                f.write(audio_data)
+            segment_files.append(seg_path)
 
-        if i < len(audio_segments) - 1:
-            next_speaker = audio_segments[i + 1][0]
-            current_config = SPEAKER_CONFIGS.get(speaker, {})
-            next_config = SPEAKER_CONFIGS.get(next_speaker, {})
-            pause_duration = max(
-                current_config.get("pause_before_ms", 300),
-                next_config.get("pause_before_ms", 200),
-            )
+            if i < len(audio_segments) - 1:
+                next_speaker = audio_segments[i + 1][0]
+                current_config = SPEAKER_CONFIGS.get(speaker, {})
+                next_config = SPEAKER_CONFIGS.get(next_speaker, {})
+                pause_duration = max(
+                    current_config.get("pause_before_ms", 300),
+                    next_config.get("pause_before_ms", 200),
+                )
 
-            pause_path = os.path.join(temp_dir, f"pause_{i:04d}.mp3")
-            pause_data = create_silence(pause_duration, sample_rate)
-            with open(pause_path, "wb") as f:
-                f.write(pause_data)
-            pause_files.append(pause_path)
+                pause_path = os.path.join(temp_dir, f"pause_{i:04d}.mp3")
+                pause_data = create_silence_mp3(pause_duration, sample_rate)
+                with open(pause_path, "wb") as f:
+                    f.write(pause_data)
+                pause_files.append(pause_path)
 
-    with open(output_path, "wb") as outfile:
-        for i, seg_file in enumerate(segment_files):
-            with open(seg_file, "rb") as infile:
-                outfile.write(infile.read())
-            if i < len(pause_files):
-                with open(pause_files[i], "rb") as infile:
+        with open(output_path, "wb") as outfile:
+            for i, seg_file in enumerate(segment_files):
+                with open(seg_file, "rb") as infile:
                     outfile.write(infile.read())
-
-    for seg_file in segment_files:
-        os.remove(seg_file)
-    for pause_file in pause_files:
-        os.remove(pause_file)
-    os.rmdir(temp_dir)
-
-
-def resolve_api_key(api_key: str) -> str:
-    """Resolves API key from argument or environment variable."""
-    if api_key:
-        return api_key
-    env_key = os.environ.get("MINIMAX_API_KEY") or os.environ.get("MINIMAX_API_TOKEN")
-    if env_key:
-        return env_key
-    return None
-
-
-def sanitize_filename(name: str) -> str:
-    """Removes invalid characters from a filename."""
-    keepcharacters = " ._-"
-    return "".join(c for c in name if c.isalnum() or c in keepcharacters).strip()
+                if i < len(pause_files):
+                    with open(pause_files[i], "rb") as infile:
+                        outfile.write(infile.read())
+    finally:
+        for seg_file in segment_files:
+            if os.path.exists(seg_file):
+                os.remove(seg_file)
+        for pause_file in pause_files:
+            if os.path.exists(pause_file):
+                os.remove(pause_file)
+        if os.path.exists(temp_dir):
+            os.rmdir(temp_dir)
 
 
 def main():
@@ -299,15 +252,13 @@ Examples:
   # Generate podcast from script file
   python podcast_generator.py --script podcast.txt
 
-  # With custom voices
-  python podcast_generator.py --script podcast.txt \\
-    --voice-daniel "English_CalmWoman" \\
-    --voice-annabelle "English_radiant_girl"
+  # With different voices and speeds
+  python podcast_generator.py --script podcast.txt \
+    --voice-daniel "English_magnetic_voiced_man" --speed-daniel 0.95 \
+    --voice-annabelle "English_radiant_girl" --speed-annabelle 1.0
 
-  # Different speech speeds
-  python podcast_generator.py --script podcast.txt \\
-    --speed-daniel 0.9 \\
-    --speed-annabelle 1.0
+  # List recommended voices
+  python podcast_generator.py --list-voices
 
 Script Format:
   daniel: Hello everyone, welcome to the show.
@@ -392,7 +343,7 @@ Script Format:
     )
 
     parser.add_argument(
-        "--list-voices", action="store_true", help="List available voices for podcast"
+        "--list-voices", action="store_true", help="List recommended voices for podcast"
     )
 
     args = parser.parse_args()

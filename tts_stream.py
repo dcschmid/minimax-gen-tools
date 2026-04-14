@@ -25,6 +25,8 @@ try:
 except ImportError:
     pass
 
+from utils import resolve_api_key, sanitize_filename
+
 
 MODELS = [
     "speech-2.8-hd",
@@ -199,22 +201,6 @@ async def stream_tts(
 
     await ws.close()
     return audio_data
-
-
-def resolve_api_key(api_key: str) -> str:
-    """Resolves API key from argument or environment variable."""
-    if api_key:
-        return api_key
-    env_key = os.environ.get("MINIMAX_API_KEY") or os.environ.get("MINIMAX_API_TOKEN")
-    if env_key:
-        return env_key
-    return None
-
-
-def sanitize_filename(name: str) -> str:
-    """Removes invalid characters from a filename."""
-    keepcharacters = " ._-"
-    return "".join(c for c in name if c.isalnum() or c in keepcharacters).strip()
 
 
 def main():
