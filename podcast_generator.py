@@ -4,8 +4,8 @@ Podcast Generator using MiniMax TTS API
 
 Features:
 - Generate podcast audio from script with multiple speakers
-- Different voices for different speakers
-- Automatic silence insertion between speakers
+- Different voices and speeds for different speakers
+- Natural dialogue flow with pauses and variations
 - Auto-loads .env file for API key
 """
 
@@ -14,7 +14,6 @@ import re
 import requests
 import argparse
 import time
-import base64
 
 
 try:
@@ -35,12 +34,29 @@ MODELS = [
 ]
 
 
+SPEAKER_CONFIGS = {
+    "Daniel": {
+        "voice": "English_magnetic_voiced_man",
+        "speed": 0.95,
+        "pause_before_ms": 300,
+        "pitch": 1.0,
+    },
+    "Annabelle": {
+        "voice": "English_radiant_girl",
+        "speed": 1.0,
+        "pause_before_ms": 200,
+        "pitch": 1.1,
+    },
+}
+
+
 def generate_tts(
     api_key: str,
     text: str,
     voice_id: str,
     model: str = "speech-2.8-hd",
     speed: float = 1.0,
+    pitch: float = 1.0,
     sample_rate: int = 32000,
     bitrate: int = 128000,
     audio_format: str = "mp3",
@@ -61,7 +77,7 @@ def generate_tts(
             "voice_id": voice_id,
             "speed": speed,
             "vol": 1.0,
-            "pitch": 1.0,
+            "pitch": pitch,
         },
         "audio_setting": {
             "audio_sample_rate": sample_rate,
@@ -96,13 +112,80 @@ def generate_tts(
     return audio_response.content
 
 
+def create_silence(duration_ms: int, sample_rate: int = 32000) -> bytes:
+    """
+    Creates a silent MP3 segment using pydub or raw bytes.
+    Returns silence as MP3 bytes.
+    """
+    try:
+        from pydub import AudioSegment
+
+        silence = AudioSegment.silent(duration=duration_ms, frame_rate=sample_rate)
+        return silence.export(format="mp3").read()
+    except ImportError:
+        num_samples = int(sample_rate * duration_ms / 1000)
+        return bytes(num_samples)
+
+
+def add_natural_pauses(text: str) -> str:
+    """
+    Adds natural pauses indicators to make speech more conversational.
+    Adds micro-pauses after commas, semicolons, and before 'but', 'and', 'so'.
+    """
+    text = re.sub(r",(\s+)", r", ... ", text)
+    text = re.sub(r";(\s+)", r"; ... ", text)
+    text = re.sub(r"\.(\s+[A-Z])", r". ... \1", text)
+    text = re.sub(r"\?(\s+[A-Z])", r"? ... \1", text)
+    text = re.sub(r"!(\s+[A-Z])", r"! ... \1", text)
+
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def split_into_conversational_chunks(text: str, max_length: int = 150) -> list:
+    """
+    Splits text into smaller, natural conversational chunks.
+    Respects punctuation and keeps phrases readable.
+    """
+    if len(text) <= max_length:
+        return [text]
+
+    chunks = []
+
+    separators = [". ", "? ", "! ", "; ", ", "]
+
+    current_chunk = []
+    current_length = 0
+
+    words = text.split()
+
+    for word in words:
+        word_len = len(word)
+
+        if current_length + word_len > max_length and current_chunk:
+            chunks.append(" ".join(current_chunk))
+            current_chunk = []
+            current_length = 0
+
+        current_chunk.append(word)
+        current_length += word_len + 1
+
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+
+    merged = []
+    for chunk in chunks:
+        if merged and len(merged[-1]) + len(chunk) < max_length * 1.2:
+            merged[-1] = merged[-1] + " " + chunk
+        else:
+            merged.append(chunk)
+
+    return merged if merged else [text]
+
+
 def parse_podcast_script(script_text: str) -> list:
     """
     Parses podcast script and returns list of (speaker, text) tuples.
-    Supports formats like:
-    - daniel: Hello world
-    - [daniel] Hello world
-    - Daniel: Hello world
     """
     segments = []
     lines = script_text.strip().split("\n")
@@ -125,7 +208,7 @@ def parse_podcast_script(script_text: str) -> list:
                 segments.append((current_speaker, " ".join(current_text)))
 
             speaker = match.group(1).lower()
-            if speaker == "annabelle" or speaker == "daniel":
+            if speaker in ("annabelle", "daniel"):
                 current_speaker = speaker.capitalize()
             else:
                 continue
@@ -140,41 +223,54 @@ def parse_podcast_script(script_text: str) -> list:
     return segments
 
 
-def create_silence(duration_ms: int = 500, sample_rate: int = 32000) -> bytes:
-    """
-    Creates a silent audio segment.
-    """
-    num_samples = int(sample_rate * duration_ms / 1000)
-    silence = bytes(num_samples)
-    return silence
-
-
-def combine_audio_segments(
-    segments: list, output_path: str, sample_rate: int = 32000
+def combine_audio_with_pauses(
+    audio_segments: list, output_path: str, sample_rate: int = 32000
 ) -> None:
     """
-    Combines audio segments into a single file.
-    For MP3, we write raw PCM and then convert, or just concatenate MP3s.
+    Combines audio segments with natural pauses between speakers.
     """
-    import subprocess
+    import struct
+    import wave
 
-    temp_dir = os.path.join(os.path.dirname(output_path), "temp_segments")
+    temp_dir = os.path.join(os.path.dirname(output_path) or ".", "temp_podcast")
     os.makedirs(temp_dir, exist_ok=True)
 
     segment_files = []
-    for i, (speaker, audio_data) in enumerate(segments):
+    pause_files = []
+
+    for i, (speaker, audio_data) in enumerate(audio_segments):
         seg_path = os.path.join(temp_dir, f"segment_{i:04d}.mp3")
         with open(seg_path, "wb") as f:
             f.write(audio_data)
         segment_files.append(seg_path)
 
+        if i < len(audio_segments) - 1:
+            next_speaker = audio_segments[i + 1][0]
+            current_config = SPEAKER_CONFIGS.get(speaker, {})
+            next_config = SPEAKER_CONFIGS.get(next_speaker, {})
+            pause_duration = max(
+                current_config.get("pause_before_ms", 300),
+                next_config.get("pause_before_ms", 200),
+            )
+
+            pause_path = os.path.join(temp_dir, f"pause_{i:04d}.mp3")
+            pause_data = create_silence(pause_duration, sample_rate)
+            with open(pause_path, "wb") as f:
+                f.write(pause_data)
+            pause_files.append(pause_path)
+
     with open(output_path, "wb") as outfile:
-        for seg_file in segment_files:
+        for i, seg_file in enumerate(segment_files):
             with open(seg_file, "rb") as infile:
                 outfile.write(infile.read())
+            if i < len(pause_files):
+                with open(pause_files[i], "rb") as infile:
+                    outfile.write(infile.read())
 
     for seg_file in segment_files:
         os.remove(seg_file)
+    for pause_file in pause_files:
+        os.remove(pause_file)
     os.rmdir(temp_dir)
 
 
@@ -208,11 +304,10 @@ Examples:
     --voice-daniel "English_CalmWoman" \\
     --voice-annabelle "English_radiant_girl"
 
-  # Custom model
-  python podcast_generator.py --script podcast.txt --model speech-02-turbo
-
-  # Save with custom name
-  python podcast_generator.py --script podcast.txt --output my_podcast.mp3
+  # Different speech speeds
+  python podcast_generator.py --script podcast.txt \\
+    --speed-daniel 0.9 \\
+    --speed-annabelle 1.0
 
 Script Format:
   daniel: Hello everyone, welcome to the show.
@@ -224,7 +319,6 @@ Script Format:
     parser.add_argument(
         "--script", required=True, help="Podcast script file (txt or md)"
     )
-
     parser.add_argument(
         "--api-key", help="MiniMax API key (or set MINIMAX_API_KEY env var)"
     )
@@ -238,18 +332,42 @@ Script Format:
 
     parser.add_argument(
         "--voice-daniel",
-        default="English_magnetic_voiced_man",
-        help="Voice for Daniel (default: English_magnetic_voiced_man)",
+        default=SPEAKER_CONFIGS["Daniel"]["voice"],
+        help=f"Voice for Daniel (default: {SPEAKER_CONFIGS['Daniel']['voice']})",
     )
 
     parser.add_argument(
         "--voice-annabelle",
-        default="English_radiant_girl",
-        help="Voice for Annabelle (default: English_radiant_girl)",
+        default=SPEAKER_CONFIGS["Annabelle"]["voice"],
+        help=f"Voice for Annabelle (default: {SPEAKER_CONFIGS['Annabelle']['voice']})",
     )
 
     parser.add_argument(
-        "--speed", type=float, default=1.0, help="Speech speed (default: 1.0)"
+        "--speed-daniel",
+        type=float,
+        default=SPEAKER_CONFIGS["Daniel"]["speed"],
+        help="Speech speed for Daniel (default: 0.95)",
+    )
+
+    parser.add_argument(
+        "--speed-annabelle",
+        type=float,
+        default=SPEAKER_CONFIGS["Annabelle"]["speed"],
+        help="Speech speed for Annabelle (default: 1.0)",
+    )
+
+    parser.add_argument(
+        "--pitch-daniel",
+        type=float,
+        default=SPEAKER_CONFIGS["Daniel"]["pitch"],
+        help="Pitch for Daniel (default: 1.0)",
+    )
+
+    parser.add_argument(
+        "--pitch-annabelle",
+        type=float,
+        default=SPEAKER_CONFIGS["Annabelle"]["pitch"],
+        help="Pitch for Annabelle (default: 1.1)",
     )
 
     parser.add_argument(
@@ -258,11 +376,9 @@ Script Format:
         default=32000,
         help="Sample rate in Hz (default: 32000)",
     )
-
     parser.add_argument(
         "--bitrate", type=int, default=128000, help="Bitrate in bps (default: 128000)"
     )
-
     parser.add_argument(
         "--format",
         default="mp3",
@@ -271,17 +387,43 @@ Script Format:
     )
 
     parser.add_argument("--output-dir", default="podcasts", help="Output directory")
-
     parser.add_argument(
         "--output-name", help="Custom output filename (without extension)"
     )
 
+    parser.add_argument(
+        "--list-voices", action="store_true", help="List available voices for podcast"
+    )
+
     args = parser.parse_args()
+
+    if args.list_voices:
+        print("Recommended voices for podcasts:")
+        print("\nMale voices (for Daniel):")
+        for v in [
+            "English_magnetic_voiced_man",
+            "English_CalmWoman",
+            "English_Gentle-voiced_man",
+            "English_Trustworth_Man",
+            "English_ManWithDeepVoice",
+            "English_Deep-VoicedGentleman",
+        ]:
+            print(f"  - {v}")
+        print("\nFemale voices (for Annabelle):")
+        for v in [
+            "English_radiant_girl",
+            "English_captivating_female1",
+            "English_Upbeat_Woman",
+            "English_PlayfulGirl",
+            "English_LovelyGirl",
+            "English_Soft-spokenGirl",
+        ]:
+            print(f"  - {v}")
+        return 0
 
     api_key = resolve_api_key(args.api_key)
     if not api_key:
         print("Error: No API key provided. Set MINIMAX_API_KEY environment variable")
-        print("       or use --api-key argument.")
         return 1
 
     print(f"Reading script from {args.script}...")
@@ -297,8 +439,16 @@ Script Format:
     print(f"Found {len(segments)} segments")
 
     voice_map = {
-        "Daniel": args.voice_daniel,
-        "Annabelle": args.voice_annabelle,
+        "Daniel": {
+            "voice_id": args.voice_daniel,
+            "speed": args.speed_daniel,
+            "pitch": args.pitch_daniel,
+        },
+        "Annabelle": {
+            "voice_id": args.voice_annabelle,
+            "speed": args.speed_annabelle,
+            "pitch": args.pitch_annabelle,
+        },
     }
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -314,27 +464,34 @@ Script Format:
     )
 
     print(f"Generating podcast audio...")
+    print(f"Voice mapping:")
     print(
-        f"Voice mapping: Daniel={args.voice_daniel}, Annabelle={args.voice_annabelle}"
+        f"  Daniel: voice={args.voice_daniel}, speed={args.speed_daniel}, pitch={args.pitch_daniel}"
+    )
+    print(
+        f"  Annabelle: voice={args.voice_annabelle}, speed={args.speed_annabelle}, pitch={args.pitch_annabelle}"
     )
 
     audio_segments = []
 
     for i, (speaker, text) in enumerate(segments):
-        voice_id = voice_map.get(speaker)
-        if not voice_id:
+        config = voice_map.get(speaker)
+        if not config:
             print(f"Warning: No voice configured for {speaker}, skipping...")
             continue
+
+        processed_text = add_natural_pauses(text)
 
         print(f"  [{i + 1}/{len(segments)}] {speaker}: {text[:50]}...")
 
         try:
             audio_data = generate_tts(
                 api_key=api_key,
-                text=text,
-                voice_id=voice_id,
+                text=processed_text,
+                voice_id=config["voice_id"],
                 model=args.model,
-                speed=args.speed,
+                speed=config["speed"],
+                pitch=config["pitch"],
                 sample_rate=args.sample_rate,
                 bitrate=args.bitrate,
                 audio_format=args.format,
@@ -349,16 +506,19 @@ Script Format:
         print("Error: No audio segments generated")
         return 1
 
-    print(f"\nCombining {len(audio_segments)} segments...")
-    combine_audio_segments(audio_segments, output_path, args.sample_rate)
+    print(f"\nCombining {len(audio_segments)} segments with natural pauses...")
+    combine_audio_with_pauses(audio_segments, output_path, args.sample_rate)
 
     meta_path = output_path + ".metadata.txt"
     with open(meta_path, "w", encoding="utf-8") as f:
         f.write(f"Script: {args.script}\n")
         f.write(f"Model: {args.model}\n")
-        f.write(f"Speed: {args.speed}\n")
-        f.write(f"Daniel Voice: {args.voice_daniel}\n")
-        f.write(f"Annabelle Voice: {args.voice_annabelle}\n")
+        f.write(
+            f"Daniel: voice={args.voice_daniel}, speed={args.speed_daniel}, pitch={args.pitch_daniel}\n"
+        )
+        f.write(
+            f"Annabelle: voice={args.voice_annabelle}, speed={args.speed_annabelle}, pitch={args.pitch_annabelle}\n"
+        )
         f.write(f"Segments: {len(audio_segments)}\n")
         f.write(f"Output: {output_path}\n")
 

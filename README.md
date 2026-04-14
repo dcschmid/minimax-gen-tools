@@ -308,18 +308,25 @@ Generate multi-speaker podcasts from script files.
 python podcast_generator.py --script podcast.txt
 ```
 
-### With custom voices
+### With different voices and speeds
 
 ```bash
 python podcast_generator.py --script podcast.txt \
-  --voice-daniel "English_magnetic_voiced_man" \
-  --voice-annabelle "English_radiant_girl"
+  --voice-daniel "English_magnetic_voiced_man" --speed-daniel 0.95 \
+  --voice-annabelle "English_radiant_girl" --speed-annabelle 1.0
 ```
 
-### Custom model and speed
+### List recommended voices
 
 ```bash
-python podcast_generator.py --script podcast.txt --model speech-02-turbo --speed 1.1
+python podcast_generator.py --list-voices
+```
+
+### Custom pitch for more natural sound
+
+```bash
+python podcast_generator.py --script podcast.txt \
+  --pitch-daniel 1.0 --pitch-annabelle 1.1
 ```
 
 ### Script Format
@@ -329,6 +336,12 @@ daniel: Hello everyone, welcome to the show.
 annabelle: Thanks daniel, it's great to be here.
 daniel: Today we're discussing...
 ```
+
+**Natural dialogue features:**
+- Different speech speeds per speaker
+- Different pitch for voice distinction
+- Natural pauses between speakers
+- Micro-pauses in sentences for conversational flow
 
 ## Options
 
@@ -438,12 +451,16 @@ daniel: Today we're discussing...
 | `--model` | Model to use | `speech-2.8-hd` |
 | `--voice-daniel` | Voice for Daniel | `English_magnetic_voiced_man` |
 | `--voice-annabelle` | Voice for Annabelle | `English_radiant_girl` |
-| `--speed` | Speech speed | `1.0` |
+| `--speed-daniel` | Speech speed for Daniel | `0.95` |
+| `--speed-annabelle` | Speech speed for Annabelle | `1.0` |
+| `--pitch-daniel` | Pitch for Daniel | `1.0` |
+| `--pitch-annabelle` | Pitch for Annabelle | `1.1` |
 | `--sample-rate` | Sample rate in Hz | `32000` |
 | `--bitrate` | Bitrate in bps | `128000` |
 | `--format` | Audio format: mp3, wav | `mp3` |
 | `--output-dir` | Output directory | `podcasts` |
 | `--output-name` | Custom output filename | - |
+| `--list-voices` | List recommended voices | - |
 
 ## Models
 
