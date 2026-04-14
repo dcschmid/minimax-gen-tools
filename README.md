@@ -1,6 +1,6 @@
-# Song, Image & Video Generator
+# Song, Image, Video & Speech Generator
 
-Generate songs, images, and videos using the MiniMax API.
+Generate songs, images, videos, and speech using the MiniMax API.
 
 ## Features
 
@@ -28,6 +28,23 @@ Generate songs, images, and videos using the MiniMax API.
 - **Subject Reference** - Maintain character consistency using face photos
 - **Multiple resolutions** - 720P and 1080P output
 - **Configurable duration** - 5 or 10 second clips
+
+### Voice Clone (`voice_clone.py`)
+- **Voice cloning** - Clone voice from audio file (10s-5min)
+- **Enhanced quality** - Optional prompt audio for better results
+- **Custom voice IDs** - Use cloned voices in TTS
+
+### TTS Streaming (`tts_stream.py`)
+- **WebSocket streaming** - Real-time audio synthesis
+- **Multiple voices** - 300+ system voices across 40 languages
+- **Speed/pitch control** - Adjust voice characteristics
+- **Streaming playback** - Hear audio as it's generated
+
+### TTS Async (`tts_async.py`)
+- **Long-form synthesis** - Up to 1M characters per request
+- **Voice effects** - Echo, room reverb, hall effects
+- **Multiple formats** - MP3, WAV, PCM output
+- **Timestamp support** - Accurate sentence-level timestamps
 
 ## Setup
 
@@ -192,6 +209,91 @@ python video_generator.py "Cinematic drone shot" --duration 10 --resolution 1080
 python video_generator.py "Subject video" --model S2V-01 --subject-reference "person.jpg"
 ```
 
+---
+
+## Voice Clone
+
+### Clone voice from audio
+
+```bash
+python voice_clone.py --source-audio myvoice.mp3 --voice-id my_voice
+```
+
+### Clone with prompt audio for better quality
+
+```bash
+python voice_clone.py --source-audio myvoice.mp3 --voice-id my_voice \
+  --prompt-audio sample.mp3 --prompt-text "This voice sounds natural."
+```
+
+### Use cloned voice in TTS
+
+After cloning, use the voice_id with TTS scripts:
+```bash
+python tts_async.py "Hello world" --voice-id my_voice
+```
+
+---
+
+## TTS Streaming
+
+Real-time WebSocket-based text-to-speech.
+
+### Basic TTS
+
+```bash
+python tts_stream.py "Hello world, this is a test."
+```
+
+### With custom voice
+
+```bash
+python tts_stream.py "Hello world" --voice-id "English_CalmWoman"
+```
+
+### List available voices
+
+```bash
+python tts_stream.py --list-voices
+```
+
+### Custom speed and model
+
+```bash
+python tts_stream.py "Hello world" --speed 1.2 --model speech-02-turbo
+```
+
+---
+
+## TTS Async
+
+Asynchronous long-form text-to-speech.
+
+### Basic TTS
+
+```bash
+python tts_async.py "Hello world, this is a test."
+```
+
+### Long text from file
+
+```bash
+python tts_async.py --text-file mybook.txt
+```
+
+### With voice effects
+
+```bash
+python tts_async.py "Hello world" --effect spacious_echo
+```
+
+### Custom voice settings
+
+```bash
+python tts_async.py "Hello world" --voice-id "Chinese (Mandarin)_News_Anchor" \
+  --speed 1.0 --pitch 1.5 --vol 1.2
+```
+
 ## Options
 
 | Option | Description | Default |
@@ -244,6 +346,53 @@ python video_generator.py "Subject video" --model S2V-01 --subject-reference "pe
 | `--output-dir` | Output directory | `videos` |
 | `--output-name` | Custom output filename | - |
 
+### Voice Clone Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--source-audio` | Source audio file (mp3, m4a, wav; 10s-5min) | Required |
+| `--voice-id` | Custom voice ID to assign | Required |
+| `--prompt-audio` | Optional prompt audio (<8s) for quality | - |
+| `--prompt-text` | Text spoken in prompt audio | - |
+| `--model` | Model: speech-2.8-hd, speech-02-hd | `speech-2.8-hd` |
+| `--test-text` | Preview text | Default sample |
+
+### TTS Streaming Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `text` | Text to synthesize (1-10000 chars) | Required |
+| `--api-key` | MiniMax API key | Env: `MINIMAX_API_KEY` |
+| `--model` | Model to use | `speech-2.8-hd` |
+| `--voice-id` | Voice ID | `English_expressive_narrator` |
+| `--speed` | Speech speed | `1.0` |
+| `--pitch` | Pitch adjustment | `0` |
+| `--vol` | Volume | `1.0` |
+| `--sample-rate` | Sample rate in Hz | `32000` |
+| `--bitrate` | Bitrate in bps | `128000` |
+| `--format` | Audio format: mp3, wav, pcm | `mp3` |
+| `--list-voices` | List available system voices | - |
+
+### TTS Async Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `text` | Text to synthesize (or use --text-file) | - |
+| `--text-file` | Text file for long content | - |
+| `--api-key` | MiniMax API key | Env: `MINIMAX_API_KEY` |
+| `--model` | Model to use | `speech-2.8-hd` |
+| `--voice-id` | Voice ID | `English_expressive_narrator` |
+| `--language-boost` | Language: auto, Chinese, English, etc. | `auto` |
+| `--speed` | Speech speed | `1.0` |
+| `--pitch` | Pitch | `1.0` |
+| `--vol` | Volume | `1.0` |
+| `--effect` | Voice effect | - |
+| `--sample-rate` | Sample rate in Hz | `32000` |
+| `--bitrate` | Bitrate in bps | `128000` |
+| `--format` | Audio format: mp3, wav, pcm | `mp3` |
+| `--channel` | Channels: 1 (mono), 2 (stereo) | `2` |
+| `--poll-interval` | Poll interval in seconds | `10` |
+
 ## Models
 
 | Model | Description |
@@ -270,4 +419,8 @@ songs/A_joyful_pop_song_about_s_1744500000/
 - [Lyrics Generation](https://platform.minimax.io/docs/guides/lyrics-generation)
 - [Image Generation](https://platform.minimax.io/docs/guides/image-generation)
 - [Video Generation](https://platform.minimax.io/docs/guides/video-generation)
+- [Voice Clone](https://platform.minimax.io/docs/guides/speech-voice-clone)
+- [TTS WebSocket](https://platform.minimax.io/docs/guides/speech-t2a-websocket)
+- [TTS Async](https://platform.minimax.io/docs/guides/speech-t2a-async)
+- [System Voice IDs](https://platform.minimax.io/docs/faq/system-voice-id)
 - [API Reference](https://platform.minimax.io/docs/api-reference/music-generation)

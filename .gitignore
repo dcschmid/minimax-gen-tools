@@ -30,6 +30,8 @@ build/
 songs/
 images/
 videos/
+voices/
+speech/
 *.mp3
 *.mp4
 *.wav
